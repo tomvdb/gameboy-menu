@@ -5,41 +5,63 @@
 #include <stdio.h>
 #include <gb/console.h>
 
-#define RIGHT_ARROW_CHAR 3
-#define LEFT_ARROW_CHAR 4
-#define SPACE_CHAR ' '
+#define RIGHT_ARROW_CHAR    3
+#define LEFT_ARROW_CHAR     4
+#define UNCHECKED_CHAR      5
+#define SCREEN_CHAR         6
+#define CHECK_CHAR          8
+#define NOTE_CHAR           11
+#define SPACE_CHAR          ' '
 
 struct TextParams {
     char *name;
     UBYTE configuration;
-    UBYTE configValueIndex;
     
-    // bit 1 - value option
+    // bit 1 - value option - configValueIndex contains index to configValues array
+    // bit 2 - not a menu item
+    // bit 3 - open new screen - configValueIndex contains screen number
+    // bit 4 - checkbox
+    
+    UBYTE configValueIndex;
 };
 
 const struct TextParams screen_0[] = {
-    { "Basic Setup  ", 0x00, 0x00 },
-    { "Complex Setup",  0x00, 0x00 },    
+    { "Basic Setup  ", 0x04, 0x01 },
+    { "Complex Setup",  0x04, 0x02 },    
+    { "" , 0x02, 0x00 }, 
+    { "Option 1     ",  0x01, 0x00 },
+    { "Option 2     ",  0x08, 0x00 },
+    { "Option 3     ",  0x08, 0x00 },
+    { "" , 0x02, 0x00 }, 
     { "" , 0x02, 0x00 }, 
     { "Take Action  ",  0x00, 0x00 },
-    { "Option 1     ",  0x01, 0x00 },
-    { "Option 2     ",  0x00, 0x00 },
-    { "Option 3     ",  0x00, 0x00 },
     { NULL, 0x00, 0x00 }
 };
 
 const struct TextParams screen_1[] = {
-    { "Go Here     ",  0x00, 0x00 },
-    { "Go There    ",  0x00, 0x00 },
+    { "BOption 1    ",  0x00, 0x00 },
+    { "BOption 2    ",  0x00, 0x00 },
+    { "BOption 3    ",  0x00, 0x00 },
+    { "BOption 4    ",  0x00, 0x00 },
     { NULL, 0x00, 0x00 }
 };
+
+const struct TextParams screen_2[] = {
+    { "COption 1    ",  0x00, 0x00 },
+    { "COption 2    ",  0x00, 0x00 },
+    { "COption 3    ",  0x00, 0x00 },
+    { "COption 4    ",  0x00, 0x00 },
+    { NULL, 0x00, 0x00 }
+};
+
 
 WORD configValues[10];
 
 const struct TextParams *screens_array[] = 
 {
     screen_0,
-    screen_1
+    screen_1,
+    screen_2
 };
 
 struct TextParams *currentScreenPointer;
@@ -64,17 +86,34 @@ UBYTE drawScreen()
     cls();
     
     for ( counter = 0; currentScreenPointer[counter].name; counter++ )
-    {
+    {       
         gotoxy(2, counter+1);
         if ( currentScreenPointer[counter].configuration & 0x01 )
             printf( "%s %d", currentScreenPointer[counter].name, configValues[currentScreenPointer[counter].configValueIndex] );
         else
             printf( "%s", currentScreenPointer[counter].name );
         
+        
+        // show screen option
+        if ( currentScreenPointer[counter].configuration & 0x04 )
+        {
+            gotoxy( 16, counter+1 );
+            setchar( SCREEN_CHAR );
+        }
+        
+        // show checkbox
+        if ( currentScreenPointer[counter].configuration & 0x08 )
+        {
+            gotoxy( 16, counter+1 );
+            setchar( UNCHECKED_CHAR );
+        }
+        
     }
-    
+       
     gotoxy( 1, 1 );
-    setchar( RIGHT_ARROW_CHAR );    
+    setchar( RIGHT_ARROW_CHAR );  
+
+        
     
     return counter;
 }
@@ -82,6 +121,7 @@ UBYTE drawScreen()
 void main() 
 {
     UBYTE currentScreen = 0;
+    UBYTE previousScreen = 0;
     UBYTE cursorPosition = 1;
     UBYTE counter = 0;
     
@@ -89,7 +129,8 @@ void main()
     UBYTE temp = 0;
     
     UBYTE input;
-
+    
+    previousScreen = 0;
     configValues[0] = 40;
     
     // setup and draw the inital screen
@@ -100,20 +141,37 @@ void main()
     {
         input = joypad();        
         
-        // temporary test to flip between screens
-        if ( input & J_START )
+        // current option selected "Enter Pressed"
+        if ( input & J_A )
         {
             waitpadup();
-            
-            if ( currentScreen == 1 )
-                currentScreen = 0;
-            else
-                currentScreen = 1;
-            
-            currentScreenPointer = screens_array[currentScreen];
-            counter = drawScreen();
-            cursorPosition = 1;
+                       
+            if ( currentScreenPointer[cursorPosition-1].configuration & 0x04 )  // open new screen
+            {
+                // todo: check if the screen actually exists
+                
+                previousScreen = currentScreen;
+                currentScreen = currentScreenPointer[cursorPosition-1].configValueIndex;
+                currentScreenPointer = screens_array[currentScreen];
+                counter = drawScreen();
+                cursorPosition = 1;                
+            }
         }
+        
+        // current option selected "Back Pressed"
+        if ( input & J_B )
+        {
+            waitpadup();
+
+            if ( currentScreen != previousScreen )
+            {
+                currentScreen = previousScreen;
+                currentScreenPointer = screens_array[currentScreen];
+                counter = drawScreen();
+                cursorPosition = 1;                
+            }
+        }
+        
         
         if ( input & J_LEFT )
         {
